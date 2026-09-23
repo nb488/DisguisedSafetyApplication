@@ -183,7 +183,9 @@ export default function WeatherCoverScreen() {
       let location = await Location.getCurrentPositionAsync({});
       const lat = location.coords.latitude;
       const lon = location.coords.longitude;
+      const appleMapsLink = `https://maps.apple.com/?q=${lat},${lon}`;
       const googleMapsLink = `https://maps.google.com/?q=${lat},${lon}`;
+      const mapSnapshotLink = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=600x400&markers=${lat},${lon},red-pushpin`;
 
       const customMessage = await SecureStore.getItemAsync('emergency_message');
       const messageText = customMessage || 'I need help. Please contact me or send assistance.';
@@ -207,7 +209,7 @@ export default function WeatherCoverScreen() {
         }
       }
 
-      const message = `${messageText}\n\nMy location: ${googleMapsLink}`;
+      const message = `${messageText}\n\n📍 My Emergency Location:\nApple Maps: ${appleMapsLink}\nGoogle Maps: ${googleMapsLink}\nMap Snapshot: ${mapSnapshotLink}`;
 
       const isAvailable = await SMS.isAvailableAsync();
       if (isAvailable) {
