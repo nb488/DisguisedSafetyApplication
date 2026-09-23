@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Image, Pressable, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Image, Pressable, SafeAreaView, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as SecureStore from '../../utils/storage';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+
+interface ContactItem {
+  id: string;
+  name: string;
+  phone: string;
+}
 
 const THEMES = {
   weather: {
@@ -41,7 +47,9 @@ const THEMES = {
 export default function SettingsScreen() {
   const router = useRouter();
   const [pin, setPin] = useState('');
-  const [contacts, setContacts] = useState('');
+  const [contactsList, setContactsList] = useState<ContactItem[]>([]);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [modalContacts, setModalContacts] = useState<ContactItem[]>([]);
   const [message, setMessage] = useState('');
   const [showTutorialText, setShowTutorialText] = useState(false);
   const [activeFace, setActiveFace] = useState<'weather' | 'period'>('weather');
@@ -63,8 +71,26 @@ export default function SettingsScreen() {
 
     if (savedPin) setPin(savedPin);
     if (savedContacts) {
-      const parsed = JSON.parse(savedContacts);
-      setContacts(parsed.join(', '));
+      try {
+        const parsed = JSON.parse(savedContacts);
+        if (Array.isArray(parsed)) {
+          const formatted: ContactItem[] = parsed.map((item: any, idx: number) => {
+            if (typeof item === 'string') {
+              return { id: String(Date.now() + idx), name: item, phone: item };
+            } else if (item && typeof item === 'object') {
+              return {
+                id: item.id || String(Date.now() + idx),
+                name: item.name !== undefined ? String(item.name) : '',
+                phone: item.phone !== undefined ? String(item.phone) : ''
+              };
+            }
+            return { id: String(Date.now() + idx), name: '', phone: '' };
+          });
+          setContactsList(formatted);
+        }
+      } catch (err) {
+        console.error('Error parsing contacts:', err);
+      }
     }
     if (savedMessage) setMessage(savedMessage);
     if (savedFace === 'period') {
@@ -88,8 +114,8 @@ export default function SettingsScreen() {
         await SecureStore.deleteItemAsync('app_settings_pin');
       }
       
-      const contactsArray = contacts.split(',').map(c => c.trim()).filter(c => c);
-      await SecureStore.setItemAsync('emergency_contacts', JSON.stringify(contactsArray));
+      const payload = contactsList.map((c: ContactItem) => ({ name: c.name.trim(), phone: c.phone.trim() }));
+      await SecureStore.setItemAsync('emergency_contacts', JSON.stringify(payload));
       
       if (message) {
         await SecureStore.setItemAsync('emergency_message', message);
@@ -112,6 +138,53 @@ export default function SettingsScreen() {
       setShowTutorialText(false);
       router.replace({ pathname: '/', params: { showTutorial: 'true' } });
     }, 800);
+  };
+
+  const openModal = () => {
+    setModalContacts(contactsList.map((c: ContactItem) => ({ ...c })));
+    setIsModalVisible(true);
+  };
+
+  const handleAddRow = () => {
+    setModalContacts((prev: ContactItem[]) => [
+      ...prev,
+      { id: String(Date.now() + Math.random()), name: '', phone: '' }
+    ]);
+  };
+
+  const handleRemoveRow = (id: string) => {
+    setModalContacts((prev: ContactItem[]) => prev.filter((item: ContactItem) => item.id !== id));
+  };
+
+  const handleUpdateRow = (id: string, field: 'name' | 'phone', value: string) => {
+    setModalContacts((prev: ContactItem[]) =>
+      prev.map((item: ContactItem) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const handleSaveModal = async () => {
+    for (let i = 0; i < modalContacts.length; i++) {
+      if (!modalContacts[i].phone || modalContacts[i].phone.trim() === '') {
+        Alert.alert(
+          'Validation Error',
+          `Phone number cannot be empty for row ${i + 1}${modalContacts[i].name ? ` (${modalContacts[i].name})` : ''}. Please enter a phone number.`
+        );
+        return;
+      }
+    }
+
+    const updatedList = modalContacts.map((c: ContactItem) => ({
+      ...c,
+      name: c.name.trim() || c.phone.trim(),
+      phone: c.phone.trim()
+    }));
+
+    setContactsList(updatedList);
+    await SecureStore.setItemAsync(
+      'emergency_contacts',
+      JSON.stringify(updatedList.map((c: ContactItem) => ({ name: c.name, phone: c.phone })))
+    );
+    setIsModalVisible(false);
   };
 
   return (
@@ -147,17 +220,40 @@ export default function SettingsScreen() {
             />
           </View>
 
+          {/* Emergency Contacts Section */}
           <View style={styles.section}>
-            <Text style={[styles.label, { color: theme.label }]}>Emergency Contacts</Text>
-            <Text style={[styles.helper, { color: theme.helper }]}>Comma separated list of phone numbers</Text>
-            <TextInput 
-              style={[styles.input, { backgroundColor: theme.input, borderColor: theme.inputBorder, color: activeFace === 'weather' ? '#fff' : '#495057' }]} 
-              keyboardType="phone-pad"
-              value={contacts}
-              onChangeText={setContacts}
-              placeholder="1234567890, 0987654321"
-              placeholderTextColor={activeFace === 'weather' ? 'rgba(255,255,255,0.4)' : '#ADB5BD'}
-            />
+            <View style={styles.contactHeaderRow}>
+              <Text style={[styles.label, { color: theme.label, marginBottom: 0 }]}>Emergency Contacts</Text>
+              <TouchableOpacity 
+                style={[styles.editBtn, { backgroundColor: activeFace === 'weather' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(214, 51, 108, 0.15)' }]} 
+                onPress={openModal}
+                activeOpacity={0.7}
+              >
+                <FontAwesome5 name="edit" size={13} color={theme.icon} style={{ marginRight: 6 }} />
+                <Text style={[styles.editBtnText, { color: theme.icon }]}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.helper, { color: theme.helper }]}>Saved contact names for emergency notifications.</Text>
+
+            <View style={[styles.contactDisplayBox, { backgroundColor: theme.input, borderColor: theme.inputBorder }]}>
+              {contactsList.length > 0 ? (
+                <View style={styles.contactBadgeContainer}>
+                  {contactsList.map((contact: ContactItem, idx: number) => (
+                    <View key={contact.id || idx} style={[styles.contactBadge, { backgroundColor: activeFace === 'weather' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(214, 51, 108, 0.1)' }]}>
+                      <FontAwesome5 name="user" size={12} color={theme.icon} style={{ marginRight: 8 }} />
+                      <Text style={[styles.contactBadgeText, { color: activeFace === 'weather' ? '#FFFFFF' : '#495057' }]}>
+                        {contact.name || contact.phone}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[styles.emptyContactsText, { color: activeFace === 'weather' ? 'rgba(255,255,255,0.5)' : '#ADB5BD' }]}>
+                  No emergency contacts added yet. Click Edit to add contacts.
+                </Text>
+              )}
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -255,6 +351,108 @@ export default function SettingsScreen() {
           <View style={styles.bottomSpacer} />
         </ScrollView>
 
+        {/* Emergency Contacts Table Edit Modal */}
+        <Modal
+          visible={isModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { backgroundColor: activeFace === 'weather' ? '#1E293B' : '#FFFFFF', borderColor: activeFace === 'weather' ? '#334155' : 'rgba(214, 51, 108, 0.2)' }]}>
+              
+              {/* Modal Header */}
+              <View style={styles.modalHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <FontAwesome5 name="address-book" size={18} color={activeFace === 'weather' ? '#60A5FA' : '#D6336C'} style={{ marginRight: 10 }} />
+                  <Text style={[styles.modalTitle, { color: activeFace === 'weather' ? '#FFFFFF' : '#D6336C' }]}>
+                    Edit Emergency Contacts
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.modalCloseBtn}>
+                  <Ionicons name="close" size={24} color={activeFace === 'weather' ? '#94A3B8' : '#868E96'} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.modalSubText, { color: activeFace === 'weather' ? '#94A3B8' : '#868E96' }]}>
+                Phone numbers cannot be left empty.
+              </Text>
+
+              {/* Table Container */}
+              <View style={[styles.tableCard, { borderColor: activeFace === 'weather' ? '#334155' : '#FFD1DC' }]}>
+                {/* Table Header */}
+                <View style={[styles.tableHeader, { backgroundColor: activeFace === 'weather' ? '#334155' : 'rgba(214, 51, 108, 0.08)' }]}>
+                  <Text style={[styles.tableHeaderCell, { flex: 1, color: activeFace === 'weather' ? '#E2E8F0' : '#D6336C' }]}>Name</Text>
+                  <Text style={[styles.tableHeaderCell, { flex: 1.2, color: activeFace === 'weather' ? '#E2E8F0' : '#D6336C' }]}>Phone Number</Text>
+                  <View style={{ width: 36 }} />
+                </View>
+
+                {/* Table Rows */}
+                <ScrollView style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled">
+                  {modalContacts.length > 0 ? (
+                    modalContacts.map((item: ContactItem, idx: number) => (
+                      <View key={item.id} style={[styles.tableRow, { borderBottomColor: activeFace === 'weather' ? '#334155' : '#FFF0F3' }]}>
+                        <TextInput
+                          style={[styles.tableInput, { flex: 1, color: activeFace === 'weather' ? '#FFFFFF' : '#333333', backgroundColor: activeFace === 'weather' ? '#0F172A' : '#F8F9FA', borderColor: activeFace === 'weather' ? '#475569' : '#CED4DA' }]}
+                          value={item.name}
+                          onChangeText={(val: string) => handleUpdateRow(item.id, 'name', val)}
+                          placeholder="Contact Name"
+                          placeholderTextColor={activeFace === 'weather' ? '#64748B' : '#ADB5BD'}
+                        />
+                        <TextInput
+                          style={[styles.tableInput, { flex: 1.2, color: activeFace === 'weather' ? '#FFFFFF' : '#333333', backgroundColor: activeFace === 'weather' ? '#0F172A' : '#F8F9FA', borderColor: activeFace === 'weather' ? '#475569' : '#CED4DA', marginLeft: 8 }]}
+                          value={item.phone}
+                          onChangeText={(val: string) => handleUpdateRow(item.id, 'phone', val)}
+                          placeholder="Phone Number *"
+                          keyboardType="phone-pad"
+                          placeholderTextColor={activeFace === 'weather' ? '#64748B' : '#ADB5BD'}
+                        />
+                        <TouchableOpacity onPress={() => handleRemoveRow(item.id)} style={styles.deleteRowBtn} activeOpacity={0.7}>
+                          <FontAwesome5 name="trash-alt" size={14} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  ) : (
+                    <View style={{ padding: 24, alignItems: 'center' }}>
+                      <Text style={{ color: activeFace === 'weather' ? '#94A3B8' : '#868E96', fontSize: 14 }}>
+                        No contacts in table. Click "+ Add Contact" below.
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+
+              {/* Add Contact Button */}
+              <TouchableOpacity 
+                style={[styles.addContactBtn, { backgroundColor: activeFace === 'weather' ? 'rgba(96, 165, 250, 0.15)' : 'rgba(214, 51, 108, 0.1)', borderColor: activeFace === 'weather' ? '#60A5FA' : '#D6336C' }]} 
+                onPress={handleAddRow}
+                activeOpacity={0.7}
+              >
+                <FontAwesome5 name="plus" size={13} color={activeFace === 'weather' ? '#60A5FA' : '#D6336C'} style={{ marginRight: 8 }} />
+                <Text style={[styles.addContactBtnText, { color: activeFace === 'weather' ? '#60A5FA' : '#D6336C' }]}>Add Contact</Text>
+              </TouchableOpacity>
+
+              {/* Modal Action Buttons */}
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity 
+                  style={[styles.modalActionBtn, { backgroundColor: activeFace === 'weather' ? '#334155' : '#E9ECEF' }]} 
+                  onPress={() => setIsModalVisible(false)}
+                >
+                  <Text style={[styles.modalCancelText, { color: activeFace === 'weather' ? '#CBD5E1' : '#495057' }]}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.modalActionBtn, { backgroundColor: activeFace === 'weather' ? '#2563EB' : '#D6336C' }]} 
+                  onPress={handleSaveModal}
+                >
+                  <FontAwesome5 name="check" size={13} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         <View style={styles.floatingContainer}>
           {isHovered && (
             <View style={[styles.tooltip, { backgroundColor: activeFace === 'weather' ? '#4A90E2' : '#D6336C', borderColor: 'transparent' }]}>
@@ -325,6 +523,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '400',
     borderWidth: 1.5,
+  },
+  contactHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  editBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  contactDisplayBox: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    minHeight: 60,
+    justifyContent: 'center',
+  },
+  contactBadgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  contactBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  contactBadgeText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  emptyContactsText: {
+    fontSize: 14,
+    fontWeight: '400',
+    fontStyle: 'italic',
   },
   saveBtn: {
     borderRadius: 18,
@@ -436,5 +679,118 @@ const styles = StyleSheet.create({
   chatbotIcon: {
     width: '100%',
     height: '100%',
+  },
+  /* Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 480,
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1.5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalSubText: {
+    fontSize: 13,
+    marginBottom: 16,
+  },
+  tableCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  tableHeaderCell: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  tableInput: {
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    fontSize: 14,
+  },
+  deleteRowBtn: {
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  addContactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    marginBottom: 20,
+  },
+  addContactBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    minWidth: 90,
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalSaveText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   }
 });
+

@@ -191,7 +191,20 @@ export default function WeatherCoverScreen() {
       const contactsStr = await SecureStore.getItemAsync('emergency_contacts');
       let contacts: string[] = [];
       if (contactsStr) {
-        contacts = JSON.parse(contactsStr);
+        try {
+          const parsed = JSON.parse(contactsStr);
+          if (Array.isArray(parsed)) {
+            contacts = parsed
+              .map((c: any) => {
+                if (typeof c === 'string') return c.trim();
+                if (c && typeof c === 'object' && c.phone) return String(c.phone).trim();
+                return '';
+              })
+              .filter((p: string) => p.length > 0);
+          }
+        } catch (e) {
+          console.error('Error parsing contacts JSON:', e);
+        }
       }
 
       const message = `${messageText}\n\nMy location: ${googleMapsLink}`;
