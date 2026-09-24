@@ -108,20 +108,21 @@ export default function WeatherCoverScreen() {
           If no contacts are set, it defaults to <Text style={{ fontWeight: 'bold' }}>calling 911</Text>.
         </Text>
       ),
-      top: 380,
+      top: activeFace === 'weather' ? 465 : 240,
       arrow: {
-        direction: 'up',
-        top: -45,
+        direction: activeFace === 'weather' ? 'up' : 'down',
+        top: activeFace === 'weather' ? -45 : undefined,
+        bottom: activeFace === 'weather' ? undefined : -45,
         left: '45%',
       },
       spotlight: activeFace === 'weather' ? {
-        top: 300,
+        top: 385,
         left: '3%',
         width: '94%',
         height: 65,
         borderRadius: 12,
       } : {
-        top: 480, // Positioned for periodSOSCard
+        top: 535, // Positioned for periodSOSCard
         left: '3%',
         width: '94%',
         height: 65,
@@ -221,19 +222,15 @@ export default function WeatherCoverScreen() {
     }
   };
 
-  return (
-    <ImageBackground
-      source={require('../assets/images/sunny_background.png')}
-      style={styles.container}
-      resizeMode="cover"
-    >
+  const renderContent = () => (
+    <>
       <TutorialOverlay
         isVisible={isTutorialVisible}
         steps={tutorialSteps}
         onFinish={handleTutorialComplete}
         onExit={handleTutorialComplete}
       />
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: activeFace === 'period' ? '#FFF5F7' : 'transparent' }}>
         {activeFace === 'weather' ? (
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
             {/* Header */}
@@ -495,7 +492,21 @@ export default function WeatherCoverScreen() {
           </View>
         )}
       </SafeAreaView>
+    </>
+  );
+
+  return activeFace === 'weather' ? (
+    <ImageBackground
+      source={require('../assets/images/sunny_background.png')}
+      style={styles.container}
+      resizeMode="cover"
+    >
+      {renderContent()}
     </ImageBackground>
+  ) : (
+    <View style={[styles.container, { backgroundColor: '#FFF5F7' }]}>
+      {renderContent()}
+    </View>
   );
 }
 
