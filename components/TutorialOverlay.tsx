@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, DimensionValue } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,13 +13,20 @@ export interface TutorialStep {
   right?: DimensionValue;
   nextLabel?: string;
   onNextAction?: () => void;
+  overlayColor?: string;
   arrow?: {
     direction: 'up' | 'down' | 'left' | 'right' | 'down-right';
     top?: DimensionValue;
     bottom?: DimensionValue;
     left?: DimensionValue;
     right?: DimensionValue;
+    size?: number;
+    scale?: number;
+    scaleY?: number;
+    scaleX?: number;
+    length?: number;
   };
+  scrollY?: number;
   spotlight?: {
     top?: DimensionValue;
     bottom?: DimensionValue;
@@ -38,10 +45,43 @@ interface TutorialOverlayProps {
   onExit: () => void;
   totalSteps?: number;
   stepOffset?: number;
+  onStepChange?: (stepIndex: number) => void;
+  currentStepIndex?: number;
+  onStepIndexChange?: (stepIndex: number) => void;
+  overlayColor?: string;
 }
 
-export default function TutorialOverlay({ isVisible, steps, onFinish, onExit, totalSteps, stepOffset }: TutorialOverlayProps) {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+export default function TutorialOverlay({
+  isVisible,
+  steps,
+  onFinish,
+  onExit,
+  totalSteps,
+  stepOffset,
+  onStepChange,
+  currentStepIndex: controlledStepIndex,
+  onStepIndexChange,
+  overlayColor
+}: TutorialOverlayProps) {
+  const [internalStepIndex, setInternalStepIndex] = useState(0);
+
+  const currentStepIndex = controlledStepIndex !== undefined ? controlledStepIndex : internalStepIndex;
+
+  const updateStepIndex = (newIndexOrFn: number | ((prev: number) => number)) => {
+    const nextIndex = typeof newIndexOrFn === 'function' ? newIndexOrFn(currentStepIndex) : newIndexOrFn;
+    if (onStepIndexChange) {
+      onStepIndexChange(nextIndex);
+    }
+    setInternalStepIndex(nextIndex);
+  };
+
+  const setCurrentStepIndex = updateStepIndex;
+
+  useEffect(() => {
+    if (isVisible) {
+      onStepChange?.(currentStepIndex);
+    }
+  }, [currentStepIndex, isVisible, onStepChange]);
 
   if (!isVisible || steps.length === 0) return null;
 
@@ -91,7 +131,7 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit, to
   const renderArrow = () => {
     if (!currentStep.arrow) return null;
 
-    const { direction, top, bottom, left, right } = currentStep.arrow;
+    const { direction, top, bottom, left, right, size = 40, scale, scaleY, scaleX, length } = currentStep.arrow;
     
     let iconName: any = 'arrow-up';
     if (direction === 'down') iconName = 'arrow-down';
@@ -103,8 +143,27 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit, to
     if (top !== undefined) arrowStyle.top = top;
     if (bottom !== undefined) arrowStyle.bottom = bottom;
     
+    const transforms: any[] = [];
     if (direction === 'down-right') {
-      arrowStyle.transform = [{ rotate: '45deg' }];
+      transforms.push({ rotate: '45deg' });
+    }
+    if (scale !== undefined) {
+      transforms.push({ scale });
+    }
+
+    const effectiveLength = length !== undefined ? length / size : undefined;
+    const finalScaleY = scaleY ?? (direction === 'up' || direction === 'down' || direction === 'down-right' ? effectiveLength : undefined);
+    const finalScaleX = scaleX ?? (direction === 'left' || direction === 'right' ? effectiveLength : undefined);
+
+    if (finalScaleY !== undefined) {
+      transforms.push({ scaleY: finalScaleY });
+    }
+    if (finalScaleX !== undefined) {
+      transforms.push({ scaleX: finalScaleX });
+    }
+
+    if (transforms.length > 0) {
+      arrowStyle.transform = transforms;
     }
 
     if (left !== undefined) {
@@ -123,7 +182,7 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit, to
 
     return (
       <View style={arrowStyle}>
-        <Ionicons name={iconName} size={40} color="white" />
+        <Ionicons name={iconName} size={size} color="white" />
       </View>
     );
   };
@@ -132,7 +191,7 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit, to
   const activeDotIndex = (stepOffset ?? 0) + currentStepIndex;
 
   return (
-    <View style={styles.overlay}>
+    <View style={[styles.overlay, (currentStep.overlayColor || overlayColor) ? { backgroundColor: currentStep.overlayColor || overlayColor } : undefined]}>
       {currentStep.spotlight && (
         <View 
           style={[
@@ -207,7 +266,7 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit, to
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'transparent',
     zIndex: 1000,
     elevation: 10,
   },

@@ -9,6 +9,7 @@ import { ImageBackground, Platform, SafeAreaView, ScrollView, StyleSheet, Text, 
 import TutorialOverlay, { TutorialStep } from '../components/TutorialOverlay';
 import WeatherIcon from '../components/WeatherIcon';
 import * as SecureStore from '../utils/storage';
+import { STORAGE_KEYS } from '../utils/storage';
 import { fetchWeatherForLocation, mapIconCodeToIonicon, WeatherData, WEST_VANCOUVER_COORDS } from '../utils/weather';
 
 // Emergency Button & Spotlight Layout Constants
@@ -22,12 +23,6 @@ const WEATHER_SPOTLIGHT_TOP = WEATHER_SOS_TOP - SPOTLIGHT_PADDING; // 344
 const WEATHER_SPOTLIGHT_HEIGHT = SOS_CARD_HEIGHT + (SPOTLIGHT_PADDING * 2); // 67
 const WEATHER_SPOTLIGHT_RADIUS = SOS_CARD_BORDER_RADIUS + SPOTLIGHT_PADDING; // 13
 
-// Health Advisory Card Top & Spotlight
-const PERIOD_SOS_TOP = 535;
-const PERIOD_SPOTLIGHT_TOP = PERIOD_SOS_TOP - SPOTLIGHT_PADDING; // 534
-const PERIOD_SPOTLIGHT_HEIGHT = SOS_CARD_HEIGHT + (SPOTLIGHT_PADDING * 2); // 67
-const PERIOD_SPOTLIGHT_RADIUS = SOS_CARD_BORDER_RADIUS + SPOTLIGHT_PADDING; // 13
-
 export default function CoverScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -38,16 +33,20 @@ export default function CoverScreen() {
 
   const checkTutorialStatus = useCallback(async () => {
     if (params.showTutorial === 'true') {
+      await SecureStore.setItemAsync(STORAGE_KEYS.ACTIVE_FACE, 'weather');
+      setActiveFace('weather');
       setIsTutorialVisible(true);
       return;
     }
 
     try {
-      const hasSeen1 = await SecureStore.getItemAsync('has_seen_tutorial');
-      const hasSeen2 = await SecureStore.getItemAsync('hasSeenTutorial');
+      const hasSeen1 = await SecureStore.getItemAsync(STORAGE_KEYS.HAS_SEEN_TUTORIAL);
+      const hasSeen2 = await SecureStore.getItemAsync(STORAGE_KEYS.HAS_SEEN_TUTORIAL_ALT);
       if (hasSeen1 === 'true' || hasSeen2 === 'true') {
         setIsTutorialVisible(false);
       } else {
+        await SecureStore.setItemAsync(STORAGE_KEYS.ACTIVE_FACE, 'weather');
+        setActiveFace('weather');
         setIsTutorialVisible(true);
       }
     } catch (error) {
@@ -63,7 +62,7 @@ export default function CoverScreen() {
     useCallback(() => {
       async function loadSettings() {
         try {
-          const face = await SecureStore.getItemAsync('active_face');
+          const face = await SecureStore.getItemAsync(STORAGE_KEYS.ACTIVE_FACE);
           if (face === 'period') {
             setActiveFace('period');
           } else {
@@ -89,11 +88,10 @@ export default function CoverScreen() {
     loadWeather();
   }, []);
 
-
   const handleTutorialComplete = async () => {
     try {
-      await SecureStore.setItemAsync('has_seen_tutorial', 'true');
-      await SecureStore.setItemAsync('hasSeenTutorial', 'true');
+      await SecureStore.setItemAsync(STORAGE_KEYS.HAS_SEEN_TUTORIAL, 'true');
+      await SecureStore.setItemAsync(STORAGE_KEYS.HAS_SEEN_TUTORIAL_ALT, 'true');
       setIsTutorialVisible(false);
       if (params.showTutorial) {
         router.setParams({ showTutorial: undefined });
@@ -110,44 +108,31 @@ export default function CoverScreen() {
   const tutorialSteps: TutorialStep[] = [
     {
       title: 'Welcome to Wing',
-      description: `On the surface, this app blends in perfectly. Currently, it looks like a ${activeFace === 'weather' ? 'weather app' : 'period tracker'}, but you can customize it with different 'faces' in settings.`,
+      description: `On the surface, this app blends in perfectly. Currently, it looks like a weather app, but you can customize it with different 'faces' in settings.`,
     },
     {
       title: 'Emergency SOS',
-      description: (
-        <Text style={{ fontSize: 16, color: '#666', lineHeight: 24 }}>
-          {activeFace === 'weather'
-            ? 'Tapping this "Severe Weather Alert" card will send an SOS message with your location and message to your saved emergency contacts.'
-            : 'Tapping this "Health Advisory" card will send an SOS message with your location and message to your saved emergency contacts.'}
-        </Text>
-      ),
-      top: activeFace === 'weather' ? WEATHER_SPOTLIGHT_TOP + WEATHER_SPOTLIGHT_HEIGHT + 10 : 240,
+      description: 'Tapping this "Severe Weather Alert" card will send an SOS message with your location and message to your saved emergency contacts.',
+      top: WEATHER_SPOTLIGHT_TOP + WEATHER_SPOTLIGHT_HEIGHT + 10,
       arrow: {
-        direction: activeFace === 'weather' ? 'up' : 'down',
-        top: activeFace === 'weather' ? -45 : undefined,
-        bottom: activeFace === 'weather' ? undefined : -45,
+        direction: 'up',
+        top: -45,
         left: '45%',
       },
-      spotlight: activeFace === 'weather' ? {
+      spotlight: {
         top: WEATHER_SPOTLIGHT_TOP,
         left: '2.8%',
         width: '94.4%',
         height: WEATHER_SPOTLIGHT_HEIGHT,
         borderRadius: WEATHER_SPOTLIGHT_RADIUS,
-      } : {
-        top: PERIOD_SPOTLIGHT_TOP,
-        left: '2.8%',
-        width: '94.4%',
-        height: PERIOD_SPOTLIGHT_HEIGHT,
-        borderRadius: PERIOD_SPOTLIGHT_RADIUS,
       }
     },
     {
       title: 'Hidden Settings',
-      description: 'This is the discreet app button. Tap the hand icon at the bottom right corner of the screen (or tap button below) to enter your PIN and proceed to the settings walkthrough.',
-      bottom: 90,
-      right: '2%',
-      nextLabel: 'Tap Hand Icon 👇',
+      description: 'Tap the hand icon at the bottom right corner of the screen to access the hidden settings page',
+      bottom: 110,
+      right: '7%',
+      nextLabel: 'Next',
       onNextAction: () => handleSettingsPress(),
       arrow: {
         direction: 'down-right',
@@ -155,8 +140,8 @@ export default function CoverScreen() {
         right: 15,
       },
       spotlight: {
-        bottom: 20,
-        right: 15,
+        bottom: 21,
+        right: 17,
         width: 50,
         height: 50,
         borderRadius: 25,
@@ -170,40 +155,38 @@ export default function CoverScreen() {
       await handleTutorialComplete();
     }
     try {
-      const storedPin = await SecureStore.getItemAsync('app_settings_pin');
+      const storedPin = (await SecureStore.getItemAsync(STORAGE_KEYS.PIN)) || (await SecureStore.getItemAsync('user_pin'));
       if (!storedPin) {
-        router.push({ pathname: '/settings', params: isTut ? { showTutorial: 'true' } : {} });
+        router.push({ pathname: '/settingsPage', params: isTut ? { showTutorial: 'true' } : {} });
       } else {
         router.push({ pathname: '/pin', params: isTut ? { showTutorial: 'true' } : {} });
       }
     } catch (error) {
       console.error('SecureStore error:', error);
-      router.push('/settings');
+      router.push('/settingsPage');
     }
   };
 
-  const handleSOSPress = () => {
-    triggerSOS();
-    router.push('/settings/chatbot');
+  const handleSOSPress = async () => {
+    await triggerSOS();
   };
 
-  const triggerSOS = async () => {
+  const triggerSOS = async (): Promise<boolean> => {
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        return;
+      const [permissionRes, customMessage, contactsStr] = await Promise.all([
+        Location.requestForegroundPermissionsAsync(),
+        SecureStore.getItemAsync(STORAGE_KEYS.MESSAGE),
+        SecureStore.getItemAsync(STORAGE_KEYS.CONTACTS)
+      ]);
+
+      if (permissionRes.status !== 'granted') {
+        Alert.alert(
+          'Location Required',
+          'Location access is required to send your emergency GPS location. Please enable location permissions.'
+        );
+        return false;
       }
 
-      let location = await Location.getCurrentPositionAsync({});
-      const lat = location.coords.latitude;
-      const lon = location.coords.longitude;
-      const appleMapsLink = `https://maps.apple.com/?q=${lat},${lon}`;
-      const googleMapsLink = `https://maps.google.com/?q=${lat},${lon}`;
-
-      const customMessage = await SecureStore.getItemAsync('emergency_message');
-      const messageText = customMessage || 'I need help. Please contact me or send assistance.';
-
-      const contactsStr = await SecureStore.getItemAsync('emergency_contacts');
       let contacts: string[] = [];
       if (contactsStr) {
         try {
@@ -227,17 +210,39 @@ export default function CoverScreen() {
           'No Emergency Contacts',
           'Please set up your emergency contacts in settings before triggering an SOS.'
         );
-        return;
+        return false;
       }
+
+      const isAvailable = await SMS.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert(
+          'SMS Unavailable',
+          'SMS messaging is not supported on this device/simulator.'
+        );
+        return false;
+      }
+
+      let location = await Location.getLastKnownPositionAsync({});
+      if (!location) {
+        location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+      }
+
+      const lat = location.coords.latitude;
+      const lon = location.coords.longitude;
+      const appleMapsLink = `https://maps.apple.com/?q=${lat},${lon}`;
+      const googleMapsLink = `https://maps.google.com/?q=${lat},${lon}`;
+      const messageText = customMessage || 'I need help. Please contact me or send assistance.';
 
       const message = `${messageText}\n\n📍 My Emergency Location:\nApple Maps: ${appleMapsLink}\nGoogle Maps: ${googleMapsLink}`;
 
-      const isAvailable = await SMS.isAvailableAsync();
-      if (isAvailable) {
-        await SMS.sendSMSAsync(contacts, message);
-      }
+      const response = await SMS.sendSMSAsync(contacts, message);
+      return response.result === 'sent' || response.result === 'unknown';
     } catch (error) {
       console.error('SOS Error:', error);
+      Alert.alert('SOS Error', 'An error occurred while attempting to send emergency SMS.');
+      return false;
     }
   };
 

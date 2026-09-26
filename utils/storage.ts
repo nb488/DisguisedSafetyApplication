@@ -1,6 +1,15 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
+export const STORAGE_KEYS = {
+  PIN: 'app_settings_pin',
+  CONTACTS: 'emergency_contacts',
+  MESSAGE: 'emergency_message',
+  ACTIVE_FACE: 'active_face',
+  HAS_SEEN_TUTORIAL: 'has_seen_tutorial',
+  HAS_SEEN_TUTORIAL_ALT: 'hasSeenTutorial',
+} as const;
+
 export async function getItemAsync(key: string): Promise<string | null> {
   if (Platform.OS === 'web') {
     try {

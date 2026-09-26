@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Image, Pressable, SafeAreaView, Modal } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from '../utils/storage';
+import { STORAGE_KEYS } from '../utils/storage';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import TutorialOverlay, { TutorialStep } from '../components/TutorialOverlay';
@@ -48,6 +49,8 @@ const THEMES = {
 export default function SettingsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const scrollViewRef = useRef<ScrollView>(null);
+
   const [pin, setPin] = useState('');
   const [contactsList, setContactsList] = useState<ContactItem[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -58,12 +61,14 @@ export default function SettingsScreen() {
   const [isHovered, setIsHovered] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isTutorialVisible, setIsTutorialVisible] = useState(false);
+  const [tutorialStepIndex, setTutorialStepIndex] = useState(0);
 
   const theme = THEMES[activeFace];
 
   useEffect(() => {
     if (params.showTutorial === 'true') {
       setIsTutorialVisible(true);
+      setTutorialStepIndex(0);
     }
   }, [params.showTutorial]);
 
@@ -72,10 +77,10 @@ export default function SettingsScreen() {
   }, []);
 
   const loadSettings = async () => {
-    const savedPin = await SecureStore.getItemAsync('app_settings_pin');
-    const savedContacts = await SecureStore.getItemAsync('emergency_contacts');
-    const savedMessage = await SecureStore.getItemAsync('emergency_message');
-    const savedFace = await SecureStore.getItemAsync('active_face');
+    const savedPin = (await SecureStore.getItemAsync(STORAGE_KEYS.PIN)) || (await SecureStore.getItemAsync('user_pin'));
+    const savedContacts = await SecureStore.getItemAsync(STORAGE_KEYS.CONTACTS);
+    const savedMessage = await SecureStore.getItemAsync(STORAGE_KEYS.MESSAGE);
+    const savedFace = await SecureStore.getItemAsync(STORAGE_KEYS.ACTIVE_FACE);
 
     if (savedPin) setPin(savedPin);
     if (savedContacts) {
@@ -117,21 +122,21 @@ export default function SettingsScreen() {
           Alert.alert('Error', 'PIN must be exactly 4 digits');
           return;
         }
-        await SecureStore.setItemAsync('app_settings_pin', pin);
+        await SecureStore.setItemAsync(STORAGE_KEYS.PIN, pin);
       } else {
-        await SecureStore.deleteItemAsync('app_settings_pin');
+        await SecureStore.deleteItemAsync(STORAGE_KEYS.PIN);
       }
       
       const payload = contactsList.map((c: ContactItem) => ({ name: c.name.trim(), phone: c.phone.trim() }));
-      await SecureStore.setItemAsync('emergency_contacts', JSON.stringify(payload));
+      await SecureStore.setItemAsync(STORAGE_KEYS.CONTACTS, JSON.stringify(payload));
       
       if (message) {
-        await SecureStore.setItemAsync('emergency_message', message);
+        await SecureStore.setItemAsync(STORAGE_KEYS.MESSAGE, message);
       } else {
-        await SecureStore.deleteItemAsync('emergency_message');
+        await SecureStore.deleteItemAsync(STORAGE_KEYS.MESSAGE);
       }
 
-      await SecureStore.setItemAsync('active_face', tempFace);
+      await SecureStore.setItemAsync(STORAGE_KEYS.ACTIVE_FACE, tempFace);
       setActiveFace(tempFace);
 
       Alert.alert('Success', 'Settings saved securely.');
@@ -140,14 +145,47 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleTutorialPress = () => {
+  const handleTutorialPress = async () => {
+    await SecureStore.setItemAsync(STORAGE_KEYS.ACTIVE_FACE, 'weather');
+    setActiveFace('weather');
+    setTempFace('weather');
     router.replace({ pathname: '/', params: { showTutorial: 'true' } });
+  };
+
+  const openModal = () => {
+    setModalContacts(contactsList.map((c: ContactItem) => ({ ...c })));
+    setIsModalVisible(true);
+    if (isTutorialVisible && tutorialStepIndex === 2) {
+      setTutorialStepIndex(3);
+    }
+  };
+
+  const closeModalAndAdvanceTutorial = () => {
+    setIsModalVisible(false);
+    if (isTutorialVisible && tutorialStepIndex === 3) {
+      setTutorialStepIndex(4);
+    }
   };
 
   const handleTutorialClose = () => {
     setIsTutorialVisible(false);
+    setIsModalVisible(false);
+    setTutorialStepIndex(0);
     if (params.showTutorial) {
       router.setParams({ showTutorial: undefined });
+    }
+  };
+
+  const handleStepChange = (index: number) => {
+    const step = settingsTutorialSteps[index];
+    if (step && step.scrollY !== undefined) {
+      scrollViewRef.current?.scrollTo({ y: step.scrollY, animated: true });
+    }
+    if (index === 3) {
+      setModalContacts(contactsList.map((c: ContactItem) => ({ ...c })));
+      setIsModalVisible(true);
+    } else {
+      setIsModalVisible(false);
     }
   };
 
@@ -155,12 +193,13 @@ export default function SettingsScreen() {
     {
       title: 'Access PIN',
       description: 'Enter a 4-digit PIN to secure your hidden settings. ⚠️ Important: Please do not forget your PIN! Once set, your PIN is required to access hidden settings.',
-      top: 240,
+      scrollY: 0,
+      top: 440,
       spotlight: {
-        top: 155,
+        top: 310,
         left: '5%',
         width: '90%',
-        height: 115,
+        height: 90,
         borderRadius: 16,
       },
       arrow: {
@@ -172,81 +211,69 @@ export default function SettingsScreen() {
     {
       title: 'Emergency Contacts',
       description: 'View your saved emergency contacts. When an SOS is triggered, your location and message will be sent to all contacts listed here.',
-      top: 380,
+      scrollY: 0,
+      top: 140,
       spotlight: {
-        top: 275,
-        left: '5%',
-        width: '90%',
-        height: 125,
+        top: 390,
+        left: '3%',
+        width: '95%',
+        height: 200,
         borderRadius: 16,
       },
-      arrow: {
-        direction: 'up',
-        top: -45,
-        left: '45%',
-      }
     },
     {
       title: 'Edit Emergency Contacts',
       description: 'Tap this Edit button to add new contact names and phone numbers, update existing entries, or delete contacts.',
-      top: 320,
+      scrollY: 0,
+      top: 140,
       spotlight: {
-        top: 275,
+        top: 410,
         right: '5%',
         width: 75,
         height: 36,
         borderRadius: 12,
       },
       arrow: {
-        direction: 'up',
-        top: -45,
+        direction: 'down-right',
+        bottom: -45,
         right: 20,
       }
     },
     {
+      title: 'Manage Emergency Contacts',
+      description: 'The contact editor allows you to add names and phone numbers, update details, or remove contacts. Click "Save Contacts" to confirm your table.',
+      scrollY: 0,
+      top: 600,
+    },
+    {
       title: 'SOS Message',
       description: 'Customize the emergency message that will be sent alongside your real-time GPS location links.',
-      top: 520,
+      scrollY: 0,
+      top: 310,
       spotlight: {
-        top: 410,
-        left: '5%',
-        width: '90%',
-        height: 130,
+        top: 590,
+        left: '3%',
+        width: '95%',
+        height: 150,
         borderRadius: 16,
       },
       arrow: {
-        direction: 'up',
-        top: -45,
+        direction: 'down',
+        bottom: -45,
         left: '45%',
       }
     },
     {
       title: 'App Appearance ("Face")',
       description: 'Select what the application looks like on the surface. You can switch between Weather Forecast and Period Tracker anytime.',
-      top: 640,
+      scrollY: 430,
+      top: 500,
       spotlight: {
-        top: 550,
+        top: 300,
         left: '5%',
         width: '90%',
-        height: 110,
+        height: 160,
         borderRadius: 16,
-      },
-      arrow: {
-        direction: 'up',
-        top: -45,
-        left: '45%',
-      }
-    },
-    {
-      title: 'Save Settings',
-      description: 'Tap Save Settings after configuring your preferences to lock in your changes securely.',
-      top: 760,
-      spotlight: {
-        top: 685,
-        left: '5%',
-        width: '90%',
-        height: 60,
-        borderRadius: 18,
       },
       arrow: {
         direction: 'up',
@@ -255,11 +282,6 @@ export default function SettingsScreen() {
       }
     }
   ];
-
-  const openModal = () => {
-    setModalContacts(contactsList.map((c: ContactItem) => ({ ...c })));
-    setIsModalVisible(true);
-  };
 
   const handleAddRow = () => {
     setModalContacts((prev: ContactItem[]) => [
@@ -300,21 +322,24 @@ export default function SettingsScreen() {
       'emergency_contacts',
       JSON.stringify(updatedList.map((c: ContactItem) => ({ name: c.name, phone: c.phone })))
     );
-    setIsModalVisible(false);
+    closeModalAndAdvanceTutorial();
   };
 
   return (
     <LinearGradient colors={theme.bg as [string, string, ...string[]]} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <TutorialOverlay
-          isVisible={isTutorialVisible}
+          isVisible={isTutorialVisible && !isModalVisible}
           steps={settingsTutorialSteps}
           onFinish={handleTutorialClose}
           onExit={handleTutorialClose}
           totalSteps={9}
           stepOffset={3}
+          onStepChange={handleStepChange}
+          currentStepIndex={tutorialStepIndex}
+          onStepIndexChange={setTutorialStepIndex}
         />
-        <ScrollView style={styles.container}>
+        <ScrollView ref={scrollViewRef} style={styles.container}>
           <View style={styles.headerContainer}>
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="chevron-back" size={28} color={theme.icon} />
@@ -463,7 +488,7 @@ export default function SettingsScreen() {
                   <Text>To trigger an SOS in the Period Tracker interface, tap the <Text style={{ fontWeight: 'bold' }}>"Health Advisory"</Text> card.</Text>
                 )}
                 {"\n\n"}
-                Once tapped, your emergency SOS will be sent to your contacts, and you will be immediately directed to the AI safety chat assistant.
+                Once tapped, your location and emergency message will be pulled up in the Messages app to send to your saved contacts.
               </Text>
             </View>
           </View>
@@ -490,7 +515,7 @@ export default function SettingsScreen() {
           visible={isModalVisible}
           transparent={true}
           animationType="fade"
-          onRequestClose={() => setIsModalVisible(false)}
+          onRequestClose={closeModalAndAdvanceTutorial}
         >
           <View style={styles.modalOverlay}>
             <View style={[styles.modalCard, { backgroundColor: activeFace === 'weather' ? '#1E293B' : '#FFFFFF', borderColor: activeFace === 'weather' ? '#334155' : 'rgba(214, 51, 108, 0.2)' }]}>
@@ -503,7 +528,7 @@ export default function SettingsScreen() {
                     Edit Emergency Contacts
                   </Text>
                 </View>
-                <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.modalCloseBtn}>
+                <TouchableOpacity onPress={closeModalAndAdvanceTutorial} style={styles.modalCloseBtn}>
                   <Ionicons name="close" size={24} color={activeFace === 'weather' ? '#94A3B8' : '#868E96'} />
                 </TouchableOpacity>
               </View>
@@ -570,7 +595,7 @@ export default function SettingsScreen() {
               <View style={styles.modalActionRow}>
                 <TouchableOpacity 
                   style={[styles.modalActionBtn, { backgroundColor: activeFace === 'weather' ? '#334155' : '#E9ECEF' }]} 
-                  onPress={() => setIsModalVisible(false)}
+                  onPress={closeModalAndAdvanceTutorial}
                 >
                   <Text style={[styles.modalCancelText, { color: activeFace === 'weather' ? '#CBD5E1' : '#495057' }]}>Cancel</Text>
                 </TouchableOpacity>
@@ -584,6 +609,21 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Render TutorialOverlay inside Modal so it renders on the exact same native layer on iOS! */}
+            {isTutorialVisible && (
+              <TutorialOverlay
+                isVisible={isTutorialVisible}
+                steps={settingsTutorialSteps}
+                onFinish={handleTutorialClose}
+                onExit={handleTutorialClose}
+                totalSteps={9}
+                stepOffset={3}
+                onStepChange={handleStepChange}
+                currentStepIndex={tutorialStepIndex}
+                onStepIndexChange={setTutorialStepIndex}
+              />
+            )}
           </View>
         </Modal>
 

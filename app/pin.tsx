@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from '../utils/storage';
+import { STORAGE_KEYS } from '../utils/storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -36,14 +37,14 @@ export default function PinScreen() {
 
   const checkPin = useCallback(async () => {
     try {
-      const storedPin = await SecureStore.getItemAsync('app_settings_pin');
-      const savedFace = await SecureStore.getItemAsync('active_face');
+      const storedPin = (await SecureStore.getItemAsync(STORAGE_KEYS.PIN)) || (await SecureStore.getItemAsync('user_pin'));
+      const savedFace = await SecureStore.getItemAsync(STORAGE_KEYS.ACTIVE_FACE);
       
       if (savedFace === 'period') setActiveFace('period');
       else setActiveFace('weather');
 
       if (!storedPin) {
-        router.replace({ pathname: '/settings', params: params.showTutorial ? { showTutorial: 'true' } : {} });
+        router.replace({ pathname: '/settingsPage', params: params.showTutorial ? { showTutorial: 'true' } : {} });
       } else {
         setSavedPin(storedPin);
         setLoading(false);
@@ -67,7 +68,7 @@ export default function PinScreen() {
       
       if (newPin.length === 4) {
         if (newPin === savedPin) {
-          router.replace({ pathname: '/settings', params: params.showTutorial ? { showTutorial: 'true' } : {} });
+          router.replace({ pathname: '/settingsPage', params: params.showTutorial ? { showTutorial: 'true' } : {} });
         } else {
           Alert.alert('Error', 'Incorrect PIN');
           setPin('');
