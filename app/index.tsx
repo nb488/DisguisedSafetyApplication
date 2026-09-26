@@ -4,22 +4,37 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SMS from 'expo-sms';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ImageBackground, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ImageBackground, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import TutorialOverlay, { TutorialStep } from '../components/TutorialOverlay';
 import WeatherIcon from '../components/WeatherIcon';
 import * as SecureStore from '../utils/storage';
 import { fetchWeatherForLocation, mapIconCodeToIonicon, WeatherData, WEST_VANCOUVER_COORDS } from '../utils/weather';
 
-export default function WeatherCoverScreen() {
+// Emergency Button & Spotlight Layout Constants
+const SOS_CARD_HEIGHT = 65;
+const SOS_CARD_BORDER_RADIUS = 12;
+const SPOTLIGHT_PADDING = 1; // 1px greater on all 4 sides (top, bottom, left, right)
+
+// Severe Weather Alert Card Top & Spotlight
+const WEATHER_SOS_TOP = 345;
+const WEATHER_SPOTLIGHT_TOP = WEATHER_SOS_TOP - SPOTLIGHT_PADDING; // 344
+const WEATHER_SPOTLIGHT_HEIGHT = SOS_CARD_HEIGHT + (SPOTLIGHT_PADDING * 2); // 67
+const WEATHER_SPOTLIGHT_RADIUS = SOS_CARD_BORDER_RADIUS + SPOTLIGHT_PADDING; // 13
+
+// Health Advisory Card Top & Spotlight
+const PERIOD_SOS_TOP = 535;
+const PERIOD_SPOTLIGHT_TOP = PERIOD_SOS_TOP - SPOTLIGHT_PADDING; // 534
+const PERIOD_SPOTLIGHT_HEIGHT = SOS_CARD_HEIGHT + (SPOTLIGHT_PADDING * 2); // 67
+const PERIOD_SPOTLIGHT_RADIUS = SOS_CARD_BORDER_RADIUS + SPOTLIGHT_PADDING; // 13
+
+export default function CoverScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [isTutorialVisible, setIsTutorialVisible] = useState(false);
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoadingWeather, setIsLoadingWeather] = useState(true);
   const [activeFace, setActiveFace] = useState<'weather' | 'period'>('weather');
-  const [isCountingDown, setIsCountingDown] = useState(false);
-  const [countdown, setCountdown] = useState(5);
 
   const checkTutorialStatus = useCallback(async () => {
     if (params.showTutorial === 'true') {
@@ -28,8 +43,11 @@ export default function WeatherCoverScreen() {
     }
 
     try {
-      const hasSeen = await SecureStore.getItemAsync('has_seen_tutorial');
-      if (hasSeen !== 'true') {
+      const hasSeen1 = await SecureStore.getItemAsync('has_seen_tutorial');
+      const hasSeen2 = await SecureStore.getItemAsync('hasSeenTutorial');
+      if (hasSeen1 === 'true' || hasSeen2 === 'true') {
+        setIsTutorialVisible(false);
+      } else {
         setIsTutorialVisible(true);
       }
     } catch (error) {
@@ -56,7 +74,8 @@ export default function WeatherCoverScreen() {
         }
       }
       loadSettings();
-    }, [])
+      checkTutorialStatus();
+    }, [checkTutorialStatus])
   );
 
   useEffect(() => {
@@ -70,25 +89,21 @@ export default function WeatherCoverScreen() {
     loadWeather();
   }, []);
 
-  useEffect(() => {
-    let timer: any;
-    if (isCountingDown && countdown > 0) {
-      timer = setTimeout(() => {
-        setCountdown(countdown - 1);
-      }, 1000);
-    } else if (isCountingDown && countdown === 0) {
-      triggerSOS();
-    }
-    return () => clearTimeout(timer);
-  }, [isCountingDown, countdown]);
 
   const handleTutorialComplete = async () => {
     try {
       await SecureStore.setItemAsync('has_seen_tutorial', 'true');
+      await SecureStore.setItemAsync('hasSeenTutorial', 'true');
       setIsTutorialVisible(false);
+      if (params.showTutorial) {
+        router.setParams({ showTutorial: undefined });
+      }
     } catch (error) {
       console.error('Error saving tutorial status:', error);
-      setIsTutorialVisible(false); // Hide anyway
+      setIsTutorialVisible(false);
+      if (params.showTutorial) {
+        router.setParams({ showTutorial: undefined });
+      }
     }
   };
 
@@ -96,19 +111,17 @@ export default function WeatherCoverScreen() {
     {
       title: 'Welcome to Wing',
       description: `On the surface, this app blends in perfectly. Currently, it looks like a ${activeFace === 'weather' ? 'weather app' : 'period tracker'}, but you can customize it with different 'faces' in settings.`,
-      top: 100,
     },
     {
       title: 'Emergency SOS',
       description: (
         <Text style={{ fontSize: 16, color: '#666', lineHeight: 24 }}>
           {activeFace === 'weather'
-            ? 'Tapping this "Severe Weather Alert" card will immediately and silently send an SOS with your location to your saved emergency contacts. '
-            : 'Tapping this "Health Advisory" card will immediately and silently send an SOS with your location to your saved emergency contacts. '}
-          If no contacts are set, it defaults to <Text style={{ fontWeight: 'bold' }}>calling 911</Text>.
+            ? 'Tapping this "Severe Weather Alert" card will send an SOS message with your location and message to your saved emergency contacts.'
+            : 'Tapping this "Health Advisory" card will send an SOS message with your location and message to your saved emergency contacts.'}
         </Text>
       ),
-      top: activeFace === 'weather' ? 465 : 240,
+      top: activeFace === 'weather' ? WEATHER_SPOTLIGHT_TOP + WEATHER_SPOTLIGHT_HEIGHT + 10 : 240,
       arrow: {
         direction: activeFace === 'weather' ? 'up' : 'down',
         top: activeFace === 'weather' ? -45 : undefined,
@@ -116,24 +129,26 @@ export default function WeatherCoverScreen() {
         left: '45%',
       },
       spotlight: activeFace === 'weather' ? {
-        top: 385,
-        left: '3%',
-        width: '94%',
-        height: 65,
-        borderRadius: 12,
+        top: WEATHER_SPOTLIGHT_TOP,
+        left: '2.8%',
+        width: '94.4%',
+        height: WEATHER_SPOTLIGHT_HEIGHT,
+        borderRadius: WEATHER_SPOTLIGHT_RADIUS,
       } : {
-        top: 535, // Positioned for periodSOSCard
-        left: '3%',
-        width: '94%',
-        height: 65,
-        borderRadius: 12,
+        top: PERIOD_SPOTLIGHT_TOP,
+        left: '2.8%',
+        width: '94.4%',
+        height: PERIOD_SPOTLIGHT_HEIGHT,
+        borderRadius: PERIOD_SPOTLIGHT_RADIUS,
       }
     },
     {
       title: 'Hidden Settings',
-      description: 'This is the discreet app button. Tap the hand icon at the bottom right corner of the screen to enter your PIN and access the real settings.',
+      description: 'This is the discreet app button. Tap the hand icon at the bottom right corner of the screen (or tap button below) to enter your PIN and proceed to the settings walkthrough.',
       bottom: 90,
       right: '2%',
+      nextLabel: 'Tap Hand Icon 👇',
+      onNextAction: () => handleSettingsPress(),
       arrow: {
         direction: 'down-right',
         bottom: -45,
@@ -150,12 +165,16 @@ export default function WeatherCoverScreen() {
   ];
 
   const handleSettingsPress = async () => {
+    const isTut = isTutorialVisible;
+    if (isTut) {
+      await handleTutorialComplete();
+    }
     try {
       const storedPin = await SecureStore.getItemAsync('app_settings_pin');
       if (!storedPin) {
-        router.push('/settings');
+        router.push({ pathname: '/settings', params: isTut ? { showTutorial: 'true' } : {} });
       } else {
-        router.push('/pin');
+        router.push({ pathname: '/pin', params: isTut ? { showTutorial: 'true' } : {} });
       }
     } catch (error) {
       console.error('SecureStore error:', error);
@@ -164,17 +183,11 @@ export default function WeatherCoverScreen() {
   };
 
   const handleSOSPress = () => {
-    setIsCountingDown(true);
-    setCountdown(5);
-  };
-
-  const handleCancelSOS = () => {
-    setIsCountingDown(false);
-    setCountdown(5);
+    triggerSOS();
+    router.push('/settings/chatbot');
   };
 
   const triggerSOS = async () => {
-    setIsCountingDown(false);
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -186,7 +199,6 @@ export default function WeatherCoverScreen() {
       const lon = location.coords.longitude;
       const appleMapsLink = `https://maps.apple.com/?q=${lat},${lon}`;
       const googleMapsLink = `https://maps.google.com/?q=${lat},${lon}`;
-      const mapSnapshotLink = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=15&size=600x400&markers=${lat},${lon},red-pushpin`;
 
       const customMessage = await SecureStore.getItemAsync('emergency_message');
       const messageText = customMessage || 'I need help. Please contact me or send assistance.';
@@ -210,12 +222,19 @@ export default function WeatherCoverScreen() {
         }
       }
 
-      const message = `${messageText}\n\n📍 My Emergency Location:\nApple Maps: ${appleMapsLink}\nGoogle Maps: ${googleMapsLink}\nMap Snapshot: ${mapSnapshotLink}`;
+      if (contacts.length === 0) {
+        Alert.alert(
+          'No Emergency Contacts',
+          'Please set up your emergency contacts in settings before triggering an SOS.'
+        );
+        return;
+      }
+
+      const message = `${messageText}\n\n📍 My Emergency Location:\nApple Maps: ${appleMapsLink}\nGoogle Maps: ${googleMapsLink}`;
 
       const isAvailable = await SMS.isAvailableAsync();
       if (isAvailable) {
-        const recipients = contacts.length > 0 ? contacts : ['911'];
-        await SMS.sendSMSAsync(recipients, message);
+        await SMS.sendSMSAsync(contacts, message);
       }
     } catch (error) {
       console.error('SOS Error:', error);
@@ -229,6 +248,8 @@ export default function WeatherCoverScreen() {
         steps={tutorialSteps}
         onFinish={handleTutorialComplete}
         onExit={handleTutorialComplete}
+        totalSteps={9}
+        stepOffset={0}
       />
       <SafeAreaView style={{ flex: 1, backgroundColor: activeFace === 'period' ? '#FFF5F7' : 'transparent' }}>
         {activeFace === 'weather' ? (
@@ -473,24 +494,7 @@ export default function WeatherCoverScreen() {
           </TouchableOpacity>
         </View>
 
-        {isCountingDown && (
-          <View style={styles.countdownOverlay}>
-            <LinearGradient
-              colors={activeFace === 'weather' ? ['rgba(15, 80, 150, 0.95)', 'rgba(0, 50, 120, 0.98)'] : ['rgba(255, 245, 247, 0.95)', 'rgba(255, 230, 235, 0.98)']}
-              style={styles.countdownGradient}
-            >
-              <Text style={[styles.countdownTitle, activeFace === 'period' && { color: '#D6336C' }]}>Sending SOS...</Text>
-              <View style={[styles.countdownCircle, activeFace === 'period' && { borderColor: '#D6336C' }]}>
-                <Text style={[styles.countdownNumber, activeFace === 'period' && { color: '#D6336C' }]}>{countdown}</Text>
-              </View>
-              <Text style={[styles.countdownSubtext, activeFace === 'period' && { color: '#868E96' }]}>Your emergency contacts will be notified in {countdown} seconds.</Text>
 
-              <TouchableOpacity onPress={handleCancelSOS} style={styles.cancelSOSBtn}>
-                <Text style={styles.cancelSOSText}>CANCEL</Text>
-              </TouchableOpacity>
-            </LinearGradient>
-          </View>
-        )}
       </SafeAreaView>
     </>
   );
@@ -860,7 +864,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   countdownOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 1000,
   },
   countdownGradient: {

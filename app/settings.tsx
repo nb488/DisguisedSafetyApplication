@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Image, Pressable, SafeAreaView, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
-import * as SecureStore from '../../utils/storage';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as SecureStore from '../utils/storage';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import TutorialOverlay, { TutorialStep } from '../components/TutorialOverlay';
 
 interface ContactItem {
   id: string;
@@ -46,18 +47,25 @@ const THEMES = {
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const [pin, setPin] = useState('');
   const [contactsList, setContactsList] = useState<ContactItem[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [modalContacts, setModalContacts] = useState<ContactItem[]>([]);
   const [message, setMessage] = useState('');
-  const [showTutorialText, setShowTutorialText] = useState(false);
   const [activeFace, setActiveFace] = useState<'weather' | 'period'>('weather');
   const [tempFace, setTempFace] = useState<'weather' | 'period'>('weather');
   const [isHovered, setIsHovered] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isTutorialVisible, setIsTutorialVisible] = useState(false);
 
   const theme = THEMES[activeFace];
+
+  useEffect(() => {
+    if (params.showTutorial === 'true') {
+      setIsTutorialVisible(true);
+    }
+  }, [params.showTutorial]);
 
   useEffect(() => {
     loadSettings();
@@ -133,12 +141,120 @@ export default function SettingsScreen() {
   };
 
   const handleTutorialPress = () => {
-    setShowTutorialText(true);
-    setTimeout(() => {
-      setShowTutorialText(false);
-      router.replace({ pathname: '/', params: { showTutorial: 'true' } });
-    }, 800);
+    router.replace({ pathname: '/', params: { showTutorial: 'true' } });
   };
+
+  const handleTutorialClose = () => {
+    setIsTutorialVisible(false);
+    if (params.showTutorial) {
+      router.setParams({ showTutorial: undefined });
+    }
+  };
+
+  const settingsTutorialSteps: TutorialStep[] = [
+    {
+      title: 'Access PIN',
+      description: 'Enter a 4-digit PIN to secure your hidden settings. ⚠️ Important: Please do not forget your PIN! Once set, your PIN is required to access hidden settings.',
+      top: 240,
+      spotlight: {
+        top: 155,
+        left: '5%',
+        width: '90%',
+        height: 115,
+        borderRadius: 16,
+      },
+      arrow: {
+        direction: 'up',
+        top: -45,
+        left: '45%',
+      }
+    },
+    {
+      title: 'Emergency Contacts',
+      description: 'View your saved emergency contacts. When an SOS is triggered, your location and message will be sent to all contacts listed here.',
+      top: 380,
+      spotlight: {
+        top: 275,
+        left: '5%',
+        width: '90%',
+        height: 125,
+        borderRadius: 16,
+      },
+      arrow: {
+        direction: 'up',
+        top: -45,
+        left: '45%',
+      }
+    },
+    {
+      title: 'Edit Emergency Contacts',
+      description: 'Tap this Edit button to add new contact names and phone numbers, update existing entries, or delete contacts.',
+      top: 320,
+      spotlight: {
+        top: 275,
+        right: '5%',
+        width: 75,
+        height: 36,
+        borderRadius: 12,
+      },
+      arrow: {
+        direction: 'up',
+        top: -45,
+        right: 20,
+      }
+    },
+    {
+      title: 'SOS Message',
+      description: 'Customize the emergency message that will be sent alongside your real-time GPS location links.',
+      top: 520,
+      spotlight: {
+        top: 410,
+        left: '5%',
+        width: '90%',
+        height: 130,
+        borderRadius: 16,
+      },
+      arrow: {
+        direction: 'up',
+        top: -45,
+        left: '45%',
+      }
+    },
+    {
+      title: 'App Appearance ("Face")',
+      description: 'Select what the application looks like on the surface. You can switch between Weather Forecast and Period Tracker anytime.',
+      top: 640,
+      spotlight: {
+        top: 550,
+        left: '5%',
+        width: '90%',
+        height: 110,
+        borderRadius: 16,
+      },
+      arrow: {
+        direction: 'up',
+        top: -45,
+        left: '45%',
+      }
+    },
+    {
+      title: 'Save Settings',
+      description: 'Tap Save Settings after configuring your preferences to lock in your changes securely.',
+      top: 760,
+      spotlight: {
+        top: 685,
+        left: '5%',
+        width: '90%',
+        height: 60,
+        borderRadius: 18,
+      },
+      arrow: {
+        direction: 'up',
+        top: -45,
+        left: '45%',
+      }
+    }
+  ];
 
   const openModal = () => {
     setModalContacts(contactsList.map((c: ContactItem) => ({ ...c })));
@@ -190,15 +306,30 @@ export default function SettingsScreen() {
   return (
     <LinearGradient colors={theme.bg as [string, string, ...string[]]} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
+        <TutorialOverlay
+          isVisible={isTutorialVisible}
+          steps={settingsTutorialSteps}
+          onFinish={handleTutorialClose}
+          onExit={handleTutorialClose}
+          totalSteps={9}
+          stepOffset={3}
+        />
         <ScrollView style={styles.container}>
           <View style={styles.headerContainer}>
             <TouchableOpacity onPress={() => router.back()}>
               <Ionicons name="chevron-back" size={28} color={theme.icon} />
             </TouchableOpacity>
             <Text style={[styles.title, { color: theme.title }]}>Settings</Text>
-            <TouchableOpacity onPress={handleTutorialPress} style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {showTutorialText && <Text style={{ color: theme.helper, marginRight: 6, fontSize: 14 }}>Tutorial</Text>}
-              <FontAwesome5 name="question-circle" size={22} color={theme.icon} />
+            <TouchableOpacity 
+              onPress={handleTutorialPress} 
+              style={[
+                styles.tutorialBtn, 
+                { backgroundColor: activeFace === 'weather' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(214, 51, 108, 0.15)', borderColor: theme.inputBorder }
+              ]} 
+              activeOpacity={0.8}
+            >
+              <FontAwesome5 name="graduation-cap" size={13} color={theme.icon} style={{ marginRight: 6 }} />
+              <Text style={[styles.tutorialBtnText, { color: theme.icon }]}>Tutorial</Text>
             </TouchableOpacity>
           </View>
 
@@ -208,8 +339,11 @@ export default function SettingsScreen() {
 
           <View style={styles.section}>
             <Text style={[styles.label, { color: theme.label }]}>Access PIN (4 Digits)</Text>
+            <Text style={[styles.pinWarningText, { color: activeFace === 'weather' ? '#FFD700' : '#D97706' }]}>
+              ⚠️ Important Warning: Please do not forget your PIN! Once set, your PIN is required to access hidden settings.
+            </Text>
             <TextInput 
-              style={[styles.input, { backgroundColor: theme.input, borderColor: theme.inputBorder, color: activeFace === 'weather' ? '#fff' : '#495057' }]} 
+              style={[styles.input, { backgroundColor: theme.input, borderColor: theme.inputBorder, color: activeFace === 'weather' ? '#fff' : '#495057', marginTop: 8 }]} 
               secureTextEntry 
               keyboardType="number-pad"
               maxLength={4}
@@ -329,7 +463,7 @@ export default function SettingsScreen() {
                   <Text>To trigger an SOS in the Period Tracker interface, tap the <Text style={{ fontWeight: 'bold' }}>"Health Advisory"</Text> card.</Text>
                 )}
                 {"\n\n"}
-                Once tapped, a 5-second countdown will begin. You can cancel the SOS at any time during this countdown.
+                Once tapped, your emergency SOS will be sent to your contacts, and you will be immediately directed to the AI safety chat assistant.
               </Text>
             </View>
           </View>
@@ -473,7 +607,7 @@ export default function SettingsScreen() {
             onPressOut={() => setIsHovered(false)}
           >
             <Image 
-              source={activeFace === 'weather' ? require('../../assets/images/assistant_btn_blue.png') : require('../../assets/images/assistant_btn_pink.png')} 
+              source={activeFace === 'weather' ? require('../assets/images/assistant_btn_blue.png') : require('../assets/images/assistant_btn_pink.png')} 
               style={styles.chatbotIcon}
               resizeMode="cover"
             />
@@ -500,6 +634,24 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '700',
     letterSpacing: -1,
+  },
+  tutorialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  tutorialBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pinWarningText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: 8,
+    lineHeight: 18,
   },
   section: {
     marginBottom: 32,
@@ -793,4 +945,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   }
 });
-

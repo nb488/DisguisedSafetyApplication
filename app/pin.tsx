@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, SafeAreaView } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from '../utils/storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +28,7 @@ const THEMES = {
 
 export default function PinScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const [pin, setPin] = useState('');
   const [savedPin, setSavedPin] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ export default function PinScreen() {
       else setActiveFace('weather');
 
       if (!storedPin) {
-        router.replace('/settings');
+        router.replace({ pathname: '/settings', params: params.showTutorial ? { showTutorial: 'true' } : {} });
       } else {
         setSavedPin(storedPin);
         setLoading(false);
@@ -51,7 +52,7 @@ export default function PinScreen() {
       console.error(e);
       setLoading(false);
     }
-  }, [router]);
+  }, [router, params.showTutorial]);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,7 +67,7 @@ export default function PinScreen() {
       
       if (newPin.length === 4) {
         if (newPin === savedPin) {
-          router.replace('/settings');
+          router.replace({ pathname: '/settings', params: params.showTutorial ? { showTutorial: 'true' } : {} });
         } else {
           Alert.alert('Error', 'Incorrect PIN');
           setPin('');
@@ -83,6 +84,9 @@ export default function PinScreen() {
     <LinearGradient colors={theme.bg as [string, string, ...string[]]} style={{ flex: 1 }}>
       <SafeAreaView style={styles.container}>
         <Text style={[styles.title, { color: theme.text }]}>Enter PIN</Text>
+        <Text style={{ color: activeFace === 'weather' ? '#FFD700' : '#D97706', fontSize: 13, textAlign: 'center', marginHorizontal: 30, marginBottom: 30, lineHeight: 18, fontWeight: '500' }}>
+          ⚠️ Important: Please do not forget your PIN! Once set, your PIN is required to access hidden settings.
+        </Text>
         
         <View style={styles.dotsContainer}>
           {[0, 1, 2, 3].map((index) => (

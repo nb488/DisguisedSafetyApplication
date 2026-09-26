@@ -11,6 +11,8 @@ export interface TutorialStep {
   bottom?: DimensionValue;
   left?: DimensionValue;
   right?: DimensionValue;
+  nextLabel?: string;
+  onNextAction?: () => void;
   arrow?: {
     direction: 'up' | 'down' | 'left' | 'right' | 'down-right';
     top?: DimensionValue;
@@ -34,9 +36,11 @@ interface TutorialOverlayProps {
   steps: TutorialStep[];
   onFinish: () => void;
   onExit: () => void;
+  totalSteps?: number;
+  stepOffset?: number;
 }
 
-export default function TutorialOverlay({ isVisible, steps, onFinish, onExit }: TutorialOverlayProps) {
+export default function TutorialOverlay({ isVisible, steps, onFinish, onExit, totalSteps, stepOffset }: TutorialOverlayProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   if (!isVisible || steps.length === 0) return null;
@@ -46,6 +50,10 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit }: 
   const isLastStep = currentStepIndex === steps.length - 1;
 
   const handleNext = () => {
+    if (currentStep.onNextAction) {
+      currentStep.onNextAction();
+      return;
+    }
     if (isLastStep) {
       setCurrentStepIndex(0);
       onFinish();
@@ -65,12 +73,20 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit }: 
     onExit();
   };
 
-  const cardPositionStyle = {
-    top: currentStep.top,
-    bottom: currentStep.bottom,
+  const isCentered = currentStep.top === undefined && currentStep.bottom === undefined;
+
+  const cardPositionStyle: any = {
     left: currentStep.left,
     right: currentStep.right,
   };
+
+  if (isCentered) {
+    cardPositionStyle.top = '50%';
+    cardPositionStyle.transform = [{ translateY: -140 }];
+  } else {
+    if (currentStep.top !== undefined) cardPositionStyle.top = currentStep.top;
+    if (currentStep.bottom !== undefined) cardPositionStyle.bottom = currentStep.bottom;
+  }
 
   const renderArrow = () => {
     if (!currentStep.arrow) return null;
@@ -111,6 +127,9 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit }: 
       </View>
     );
   };
+
+  const totalDotsCount = totalSteps ?? steps.length;
+  const activeDotIndex = (stepOffset ?? 0) + currentStepIndex;
 
   return (
     <View style={styles.overlay}>
@@ -153,12 +172,12 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit }: 
 
         {/* Indicators */}
         <View style={styles.indicatorContainer}>
-          {steps.map((_, index) => (
+          {Array.from({ length: totalDotsCount }).map((_, index) => (
             <React.Fragment key={index}>
               <View 
                 style={[
                   styles.dot, 
-                  index === currentStepIndex ? styles.activeDot : undefined
+                  index === activeDotIndex ? styles.activeDot : undefined
                 ]} 
               />
             </React.Fragment>
@@ -174,7 +193,9 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit }: 
           ) : <View style={{flex: 1}}/>}
 
           <TouchableOpacity onPress={handleNext} style={[styles.navButton, styles.primaryButton]}>
-            <Text style={styles.primaryButtonText}>{isLastStep ? 'Finish' : 'Next'}</Text>
+            <Text style={styles.primaryButtonText}>
+              {currentStep.nextLabel ? currentStep.nextLabel : (isLastStep ? 'Finish' : 'Next')}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -185,7 +206,7 @@ export default function TutorialOverlay({ isVisible, steps, onFinish, onExit }: 
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     zIndex: 1000,
     elevation: 10,
