@@ -52,7 +52,7 @@ There are more features that we discussed but were not able to implement, such a
 
 ## Get started
 1. Install Expo Go on IOS or Android device
-2. Create an Expo Cli and Expo Go account if you haven't already (https://expo.dev/signup)
+2. Create an Expo account if you haven't already (https://expo.dev/signup)
 4. Install dependencies
 
    ```bash
