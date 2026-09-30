@@ -51,15 +51,19 @@ There are more features that we discussed but were not able to implement, such a
 - typescript
 
 ## Get started
-1. Install dependencies
+1. Install Expo Go on IOS or Android device 
+2. Install dependencies
 
    ```bash
    npm install
    ```
 
-2. Start the app
+3. Start the app (scan the QR code)
 
    ```bash
    npx expo start
    ```
+
+   
+   
 
