@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Image, Pressable, SafeAreaView, Modal } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity, Alert, Image, Pressable, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from '../utils/storage';
 import { STORAGE_KEYS } from '../utils/storage';
@@ -176,18 +177,18 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleStepChange = (index: number) => {
+  const handleStepChange = useCallback((index: number) => {
     const step = settingsTutorialSteps[index];
     if (step && step.scrollY !== undefined) {
       scrollViewRef.current?.scrollTo({ y: step.scrollY, animated: true });
     }
     if (index === 3) {
-      setModalContacts(contactsList.map((c: ContactItem) => ({ ...c })));
-      setIsModalVisible(true);
+      setModalContacts(prev => (prev.length === 0 && contactsList.length > 0 ? contactsList.map((c: ContactItem) => ({ ...c })) : prev));
+      setIsModalVisible(prev => (prev ? prev : true));
     } else {
-      setIsModalVisible(false);
+      setIsModalVisible(prev => (!prev ? prev : false));
     }
-  };
+  }, [contactsList]);
 
   const settingsTutorialSteps: TutorialStep[] = [
     {

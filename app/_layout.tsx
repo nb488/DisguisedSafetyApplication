@@ -8,7 +8,7 @@ export default function RootLayout() {
     <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="pin" />
-        <Stack.Screen name="settings/index" />
+        <Stack.Screen name="settingsPage" />
         <Stack.Screen name="settings/resources" />
         <Stack.Screen name="settings/chatbot" />
     </Stack>

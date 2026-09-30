@@ -77,8 +77,11 @@ export default function TutorialOverlay({
 
   const setCurrentStepIndex = updateStepIndex;
 
+  const prevStepIndexRef = React.useRef<number | null>(null);
+
   useEffect(() => {
-    if (isVisible) {
+    if (isVisible && prevStepIndexRef.current !== currentStepIndex) {
+      prevStepIndexRef.current = currentStepIndex;
       onStepChange?.(currentStepIndex);
     }
   }, [currentStepIndex, isVisible, onStepChange]);
