@@ -41,7 +41,7 @@ We were able to learned how to create an end-to-end project, use new tools (Type
 
 #### What's next for Wing
 
-There are more features that we discussed but were not able to implement, such as hidden notifications, resources that align with a specified location, and phone/text message functionality. We also would like to create and improve on different versions of the disguise interface, presenting the app as a child's game, a period tracker and other designs.
+There are more features that we discussed but were not able to implement, such as hidden notifications and help resources that align with a specified location. We also would like to create and improve on different versions of the disguise interface, presenting the app as a child's game, a calculator, and other designs.
 
 ## Built With
 - expo.io
